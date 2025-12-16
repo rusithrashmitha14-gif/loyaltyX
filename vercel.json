@@ -3,17 +3,9 @@
   "devCommand": "npm run dev",
   "installCommand": "npm ci",
   "framework": "nextjs",
-  "regions": ["iad1"],
-  "env": {
-    "DATABASE_URL": "@database-url",
-    "DIRECT_URL": "@direct-url",
-    "NEXTAUTH_URL": "@nextauth-url",
-    "NEXTAUTH_SECRET": "@nextauth-secret",
-    "JWT_SECRET": "@jwt-secret",
-    "AUTH_SECRET": "@auth-secret",
-    "NEXT_PUBLIC_API_URL": "@next-public-api-url",
-    "NODE_ENV": "production"
-  },
+  "regions": [
+    "iad1"
+  ],
   "headers": [
     {
       "source": "/api/(.*)",
@@ -55,7 +47,3 @@
     }
   ]
 }
-
-
-
-
