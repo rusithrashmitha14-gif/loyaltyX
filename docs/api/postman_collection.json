@@ -1,0 +1,256 @@
+{
+  "info": {
+    "name": "LoyaltyX POS Integration API",
+    "description": "Complete collection for testing LoyaltyX POS integration endpoints",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "apikey",
+    "apikey": [
+      {
+        "key": "key",
+        "value": "{{api_key}}",
+        "type": "string"
+      },
+      {
+        "key": "value",
+        "value": "{{api_key}}",
+        "type": "string"
+      },
+      {
+        "key": "in",
+        "value": "header",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:3000/api/integrations",
+      "type": "string"
+    },
+    {
+      "key": "api_key",
+      "value": "lx_your_api_key_here",
+      "type": "string"
+    },
+    {
+      "key": "jwt_token",
+      "value": "your_jwt_token_here",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Generate API Key",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{jwt_token}}",
+            "description": "Business JWT token"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Main Store POS\",\n  \"environment\": \"production\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/auth",
+          "host": ["{{base_url}}"],
+          "path": ["auth"]
+        },
+        "description": "Generate a new API key for POS integration. Requires business authentication."
+      }
+    },
+    {
+      "name": "2. Create Customer (Sandbox)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "x-api-key",
+            "value": "{{api_key}}"
+          },
+          {
+            "key": "Idempotency-Key",
+            "value": "{{$guid}}",
+            "description": "Unique key for idempotent request"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"jane.doe@example.com\",\n  \"name\": \"Jane Doe\",\n  \"phone\": \"+1 (555) 999-8888\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/customers",
+          "host": ["{{base_url}}"],
+          "path": ["customers"]
+        },
+        "description": "Create or update a customer. Uses email as unique identifier."
+      }
+    },
+    {
+      "name": "3. Post Transaction (with Idempotency)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "x-api-key",
+            "value": "{{api_key}}"
+          },
+          {
+            "key": "Idempotency-Key",
+            "value": "txn_{{$timestamp}}",
+            "description": "Prevents duplicate transactions"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"customerEmail\": \"jane.doe@example.com\",\n  \"amount\": 5000.00\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/transactions",
+          "host": ["{{base_url}}"],
+          "path": ["transactions"]
+        },
+        "description": "Create a transaction. Points are calculated automatically (amount / 100)."
+      }
+    },
+    {
+      "name": "4. List Rewards",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{api_key}}"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/rewards",
+          "host": ["{{base_url}}"],
+          "path": ["rewards"]
+        },
+        "description": "Get all available rewards for redemption"
+      }
+    },
+    {
+      "name": "5. Redeem Reward",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "x-api-key",
+            "value": "{{api_key}}"
+          },
+          {
+            "key": "Idempotency-Key",
+            "value": "rdm_{{$timestamp}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"customerEmail\": \"jane.doe@example.com\",\n  \"rewardId\": 1\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/redemptions",
+          "host": ["{{base_url}}"],
+          "path": ["redemptions"]
+        },
+        "description": "Redeem a reward for a customer. Points are deducted automatically."
+      }
+    },
+    {
+      "name": "6. Register Webhook",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "x-api-key",
+            "value": "{{api_key}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"url\": \"https://yourpos.com/webhooks/loyaltyx\",\n  \"events\": [\"points_awarded\", \"redemption_completed\"]\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/webhooks/register",
+          "host": ["{{base_url}}"],
+          "path": ["webhooks", "register"]
+        },
+        "description": "Register a webhook to receive event notifications"
+      }
+    },
+    {
+      "name": "7. List Customers",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{api_key}}"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/customers?email=jane.doe@example.com",
+          "host": ["{{base_url}}"],
+          "path": ["customers"],
+          "query": [
+            {
+              "key": "email",
+              "value": "jane.doe@example.com"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "8. List Transactions",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{api_key}}"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/transactions?limit=50",
+          "host": ["{{base_url}}"],
+          "path": ["transactions"],
+          "query": [
+            {
+              "key": "limit",
+              "value": "50"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}
+

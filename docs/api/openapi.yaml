@@ -1,0 +1,555 @@
+openapi: 3.0.0
+info:
+  title: LoyaltyX POS Integration API
+  version: 1.0.0
+  description: |
+    Complete API for integrating Point-of-Sale systems with LoyaltyX loyalty management platform.
+    
+    ## Authentication
+    All requests require an API key in the `x-api-key` header.
+    
+    ## Idempotency
+    Write operations (POST) support idempotency via the `Idempotency-Key` header.
+    
+    ## Webhooks
+    Register webhook URLs to receive real-time event notifications.
+    
+  contact:
+    name: LoyaltyX Support
+    email: support@loyaltyx.com
+
+servers:
+  - url: http://localhost:3000/api/integrations
+    description: Development server
+  - url: https://api.loyaltyx.com/integrations
+    description: Production server
+
+security:
+  - ApiKeyAuth: []
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: x-api-key
+      description: API key for authentication (prefix: lx_)
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+          example: Invalid API key
+        details:
+          type: object
+          
+    Customer:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        name:
+          type: string
+          example: John Doe
+        email:
+          type: string
+          example: john@example.com
+        phone:
+          type: string
+          nullable: true
+          example: "+1 (555) 123-4567"
+        points:
+          type: integer
+          example: 150
+          
+    Transaction:
+      type: object
+      properties:
+        id:
+          type: integer
+        amount:
+          type: number
+          format: float
+        date:
+          type: string
+          format: date-time
+        customer:
+          $ref: '#/components/schemas/Customer'
+          
+    Reward:
+      type: object
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+          example: Free Coffee
+        description:
+          type: string
+          example: Get a free medium coffee
+        pointsRequired:
+          type: integer
+          example: 100
+
+paths:
+  /auth:
+    post:
+      summary: Generate API Key
+      description: Generate a new API key for POS integration (requires business JWT auth)
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+              properties:
+                name:
+                  type: string
+                  example: Main Store POS
+                environment:
+                  type: string
+                  enum: [production, sandbox]
+                  default: production
+      responses:
+        '201':
+          description: API key generated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      id:
+                        type: integer
+                      name:
+                        type: string
+                      key:
+                        type: string
+                        example: lx_a1b2c3d4e5f6...
+                      environment:
+                        type: string
+                      createdAt:
+                        type: string
+                        format: date-time
+                  message:
+                    type: string
+                    
+    get:
+      summary: List API Keys
+      description: List all API keys for authenticated business (keys are masked)
+      responses:
+        '200':
+          description: List of API keys
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      type: object
+                  count:
+                    type: integer
+
+  /customers:
+    post:
+      summary: Create/Update Customer (Upsert)
+      description: Create a new customer or update existing one by email
+      parameters:
+        - in: header
+          name: Idempotency-Key
+          schema:
+            type: string
+          required: false
+          description: Optional idempotency key for safe retries
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+                - name
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: john@example.com
+                name:
+                  type: string
+                  example: John Doe
+                phone:
+                  type: string
+                  example: "+1 (555) 123-4567"
+            example:
+              email: john@example.com
+              name: John Doe
+              phone: "+1 (555) 123-4567"
+      responses:
+        '200':
+          description: Customer created/updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: '#/components/schemas/Customer'
+                  message:
+                    type: string
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+                
+    get:
+      summary: List Customers
+      description: Get all customers for authenticated business
+      parameters:
+        - in: query
+          name: email
+          schema:
+            type: string
+          description: Filter by email
+        - in: query
+          name: phone
+          schema:
+            type: string
+          description: Filter by phone
+      responses:
+        '200':
+          description: List of customers
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Customer'
+                  count:
+                    type: integer
+
+  /transactions:
+    post:
+      summary: Create Transaction
+      description: Record a purchase transaction and award points automatically
+      parameters:
+        - in: header
+          name: Idempotency-Key
+          schema:
+            type: string
+          required: false
+          description: Unique key for idempotent request (recommended)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - amount
+              properties:
+                customerId:
+                  type: integer
+                  example: 1
+                customerEmail:
+                  type: string
+                  example: john@example.com
+                amount:
+                  type: number
+                  format: float
+                  example: 5000.00
+                  description: Transaction amount in LKR
+                date:
+                  type: string
+                  format: date-time
+                  description: Optional transaction date (defaults to now)
+            example:
+              customerEmail: john@example.com
+              amount: 5000.00
+      responses:
+        '201':
+          description: Transaction created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      transactionId:
+                        type: integer
+                      customerId:
+                        type: integer
+                      amount:
+                        type: number
+                      pointsAwarded:
+                        type: integer
+                        example: 50
+                        description: Points awarded (amount / 100)
+                      newBalance:
+                        type: integer
+                        example: 200
+                        description: Customer's new total points
+                      date:
+                        type: string
+                        format: date-time
+                  message:
+                    type: string
+              example:
+                success: true
+                data:
+                  transactionId: 123
+                  customerId: 1
+                  amount: 5000.00
+                  pointsAwarded: 50
+                  newBalance: 200
+                  date: "2025-10-10T12:00:00Z"
+                message: Transaction created successfully
+                
+    get:
+      summary: List Transactions
+      parameters:
+        - in: query
+          name: customerId
+          schema:
+            type: integer
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 100
+        - in: query
+          name: offset
+          schema:
+            type: integer
+            default: 0
+      responses:
+        '200':
+          description: List of transactions
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Transaction'
+                  pagination:
+                    type: object
+
+  /rewards:
+    get:
+      summary: List Rewards
+      description: Get all available rewards for redemption
+      responses:
+        '200':
+          description: List of rewards
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Reward'
+                  count:
+                    type: integer
+
+  /redemptions:
+    post:
+      summary: Redeem Reward
+      description: Redeem a reward for a customer (deducts points automatically)
+      parameters:
+        - in: header
+          name: Idempotency-Key
+          schema:
+            type: string
+          required: false
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - rewardId
+              properties:
+                customerId:
+                  type: integer
+                customerEmail:
+                  type: string
+                rewardId:
+                  type: integer
+            example:
+              customerEmail: john@example.com
+              rewardId: 1
+      responses:
+        '201':
+          description: Reward redeemed successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      redemptionId:
+                        type: integer
+                      customerId:
+                        type: integer
+                      rewardId:
+                        type: integer
+                      rewardTitle:
+                        type: string
+                      pointsDeducted:
+                        type: integer
+                      newBalance:
+                        type: integer
+                      date:
+                        type: string
+                        format: date-time
+        '400':
+          description: Insufficient points
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  details:
+                    type: object
+                    properties:
+                      required:
+                        type: integer
+                      available:
+                        type: integer
+                      shortage:
+                        type: integer
+                        
+    get:
+      summary: List Redemptions
+      parameters:
+        - in: query
+          name: customerId
+          schema:
+            type: integer
+        - in: query
+          name: limit
+          schema:
+            type: integer
+        - in: query
+          name: offset
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: List of redemptions
+
+  /webhooks/register:
+    post:
+      summary: Register Webhook
+      description: Register a webhook URL to receive event notifications
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - url
+              properties:
+                url:
+                  type: string
+                  format: uri
+                  example: https://yourpos.com/webhooks/loyaltyx
+                events:
+                  type: array
+                  items:
+                    type: string
+                    enum:
+                      - "*"
+                      - points_awarded
+                      - redemption_completed
+                      - customer_created
+                      - transaction_created
+                  default: ["*"]
+                  example: ["points_awarded", "redemption_completed"]
+      responses:
+        '201':
+          description: Webhook registered successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      id:
+                        type: integer
+                      url:
+                        type: string
+                      events:
+                        type: array
+                        items:
+                          type: string
+                      secret:
+                        type: string
+                        description: HMAC secret for signature verification
+                      createdAt:
+                        type: string
+                  message:
+                    type: string
+                    
+    get:
+      summary: List Webhooks
+      responses:
+        '200':
+          description: List of registered webhooks
+

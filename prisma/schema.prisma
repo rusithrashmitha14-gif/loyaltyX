@@ -1,0 +1,144 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model Business {
+  id        Int      @id @default(autoincrement())
+  name      String
+  email     String   @unique
+  password  String
+  createdAt DateTime @default(now())
+
+  customers        Customer[]
+  transactions     Transaction[]
+  rewards          Reward[]
+  apiKeys          ApiKey[]
+  webhooks         Webhook[]
+  idempotencyKeys  IdempotencyKey[]
+
+  @@map("businesses")
+}
+
+model Customer {
+  id         Int      @id @default(autoincrement())
+  name       String
+  email      String   @unique
+  phone      String?
+  points     Int      @default(0)
+  businessId Int
+
+  business     Business      @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  transactions Transaction[]
+  redemptions  Redemption[]
+
+  @@map("customers")
+}
+
+model Transaction {
+  id         Int      @id @default(autoincrement())
+  amount     Float
+  date       DateTime @default(now())
+  customerId Int
+  businessId Int
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@map("transactions")
+}
+
+model Reward {
+  id             Int    @id @default(autoincrement())
+  title          String
+  description    String
+  pointsRequired Int
+  businessId     Int
+
+  business    Business     @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  redemptions Redemption[]
+
+  @@map("rewards")
+}
+
+model Redemption {
+  id         Int      @id @default(autoincrement())
+  date       DateTime @default(now())
+  customerId Int
+  rewardId   Int
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  reward   Reward   @relation(fields: [rewardId], references: [id], onDelete: Cascade)
+
+  @@map("redemptions")
+}
+
+model ApiKey {
+  id          Int       @id @default(autoincrement())
+  key         String    @unique
+  name        String
+  businessId  Int
+  environment String    @default("production") // "production" or "sandbox"
+  isActive    Boolean   @default(true)
+  lastUsedAt  DateTime?
+  createdAt   DateTime  @default(now())
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@index([key])
+  @@map("api_keys")
+}
+
+model Webhook {
+  id         Int      @id @default(autoincrement())
+  businessId Int
+  url        String
+  events     String   // JSON array of event types
+  secret     String   // HMAC secret for signature verification
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+
+  business   Business           @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  deliveries WebhookDelivery[]
+
+  @@map("webhooks")
+}
+
+model WebhookDelivery {
+  id            Int      @id @default(autoincrement())
+  webhookId     Int
+  event         String
+  payload       String   @db.Text // JSON payload
+  status        String   // "pending", "success", "failed"
+  attempts      Int      @default(0)
+  lastAttemptAt DateTime?
+  createdAt     DateTime @default(now())
+
+  webhook Webhook @relation(fields: [webhookId], references: [id], onDelete: Cascade)
+
+  @@index([status, createdAt])
+  @@map("webhook_deliveries")
+}
+
+model IdempotencyKey {
+  id          Int      @id @default(autoincrement())
+  key         String   @unique
+  businessId  Int
+  response    String   @db.Text // Stored JSON response
+  createdAt   DateTime @default(now())
+  expiresAt   DateTime // Keys expire after 24 hours
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@index([key, businessId])
+  @@index([expiresAt])
+  @@map("idempotency_keys")
+}

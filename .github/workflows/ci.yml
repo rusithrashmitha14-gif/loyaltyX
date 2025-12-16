@@ -1,0 +1,144 @@
+name: LoyaltyX CI/CD
+
+on:
+  push:
+    branches: [main, staging, develop]
+  pull_request:
+    branches: [main, staging]
+
+jobs:
+  lint-and-build:
+    name: Lint, Type Check & Build
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Generate Prisma Client
+        run: npx prisma generate
+      
+      - name: Run ESLint
+        run: npm run lint
+      
+      - name: Type check
+        run: npx tsc --noEmit
+      
+      - name: Build application
+        run: npm run build
+        env:
+          # Mock environment variables for build
+          DATABASE_URL: "mysql://user:pass@localhost:3306/test"
+          NEXTAUTH_URL: "http://localhost:3000"
+          NEXTAUTH_SECRET: "test-secret-key-for-ci-build-only"
+          JWT_SECRET: "test-jwt-secret-for-ci-build-only"
+          AUTH_SECRET: "test-auth-secret-for-ci-build-only"
+          NEXT_PUBLIC_API_URL: "http://localhost:3000/api"
+          NODE_ENV: "production"
+      
+      - name: Check for build artifacts
+        run: |
+          if [ ! -d ".next" ]; then
+            echo "Build failed: .next directory not found"
+            exit 1
+          fi
+
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    needs: lint-and-build
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Generate Prisma Client
+        run: npx prisma generate
+      
+      # Add test commands when tests are available
+      # - name: Run unit tests
+      #   run: npm test
+      
+      # - name: Run integration tests
+      #   run: npm run test:integration
+      
+      - name: Placeholder for tests
+        run: echo "Add npm test when test suite is ready"
+
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Run npm audit
+        run: npm audit --audit-level=moderate
+        continue-on-error: true
+      
+      - name: Check for vulnerable packages
+        run: |
+          AUDIT_RESULT=$(npm audit --json | jq '.metadata.vulnerabilities.moderate + .metadata.vulnerabilities.high + .metadata.vulnerabilities.critical')
+          if [ "$AUDIT_RESULT" -gt 0 ]; then
+            echo "⚠️ Found $AUDIT_RESULT moderate or higher vulnerabilities"
+            npm audit
+          fi
+        continue-on-error: true
+
+  deploy-preview:
+    name: Deploy Preview Info
+    runs-on: ubuntu-latest
+    needs: [lint-and-build, test]
+    if: github.event_name == 'pull_request'
+    
+    steps:
+      - name: Comment on PR
+        run: |
+          echo "✅ All checks passed!"
+          echo "Vercel will automatically deploy a preview for this PR"
+          echo "Check the Vercel bot comment for the preview URL"
+
+  deployment-ready:
+    name: Ready for Production
+    runs-on: ubuntu-latest
+    needs: [lint-and-build, test, security-scan]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    
+    steps:
+      - name: Deployment notification
+        run: |
+          echo "🚀 All checks passed for main branch"
+          echo "Vercel will automatically deploy to production"
+          echo "Monitor deployment at https://vercel.com/dashboard"
+
+
+
+
